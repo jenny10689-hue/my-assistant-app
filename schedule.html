@@ -468,11 +468,58 @@ document.getElementById('earned').textContent = `$${earned.toLocaleString()}`;
   }
 
   // Google 日曆同步（需要 OAuth，這裡先顯示提示）
-  document.getElementById('sync-btn').addEventListener('click', () => {
-    showToast('🚧 Google 日曆同步功能開發中！');
+  const CLIENT_ID = '728977309080-mb7vnvfuneeep41bpjggisbntgi3k1b3.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/calendar.events';
+let tokenClient;
+
+function initGoogleAuth() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (response) => {
+      if (response.error) { showToast('❌ 授權失敗'); return; }
+      syncToCalendar(response.access_token);
+    }
   });
+}
+
+async function syncToCalendar(token) {
+  showToast('⏳ 同步中...');
+  const mk = monthKey();
+  const entries = Object.entries(scheduleData);
+  let count = 0;
+
+  for (const [dateStr, shift] of entries) {
+    if (shift === 'off') continue;
+    const time = shift === 'early' ? '07:00' : '14:30';
+    const endTime = shift === 'early' ? '16:00' : '23:30';
+    const title = shift === 'early' ? '早班' : '晚班';
+
+    const event = {
+      summary: title,
+      start: { dateTime: `${dateStr}T${time}:00`, timeZone: 'Asia/Taipei' },
+      end: { dateTime: `${dateStr}T${endTime}:00`, timeZone: 'Asia/Taipei' }
+    };
+
+    await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(event)
+    });
+    count++;
+  }
+  showToast(`✅ 已同步 ${count} 筆班表到 Google 日曆！`);
+}
+
+document.getElementById('sync-btn').addEventListener('click', () => {
+  tokenClient.requestAccessToken();
+});
 
   loadSchedule();
 </script>
+<script src="https://accounts.google.com/gsi/client" onload="initGoogleAuth()"></script>
 </body>
 </html>
