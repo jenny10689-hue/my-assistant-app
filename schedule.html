@@ -485,29 +485,38 @@ function initGoogleAuth() {
 
 async function syncToCalendar(token) {
   showToast('⏳ 同步中...');
-  const mk = monthKey();
-  const entries = Object.entries(scheduleData);
+  const monthStart = `${year}-${String(month+1).padStart(2,'0')}-01`;
+  const monthEnd = `${year}-${String(month+1).padStart(2,'0')}-31`;
+  const searchRes = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${monthStart}T00:00:00+08:00&timeMax=${monthEnd}T23:59:59+08:00&q=班&singleEvents=true`,
+    { headers: { 'Authorization': `Bearer ${token}` } }
+  );
+  const searchData = await searchRes.json();
+  for (const event of searchData.items || []) {
+    if (event.summary === '早班' || event.summary === '晚班') {
+      await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${event.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    }
+  }
   let count = 0;
-
-  for (const [dateStr, shift] of entries) {
+  for (const [dateStr, shift] of Object.entries(scheduleData)) {
     if (shift === 'off') continue;
     const time = shift === 'early' ? '07:00' : '14:30';
     const endTime = shift === 'early' ? '16:00' : '23:30';
     const title = shift === 'early' ? '早班' : '晚班';
-
-    const event = {
-      summary: title,
-      start: { dateTime: `${dateStr}T${time}:00`, timeZone: 'Asia/Taipei' },
-      end: { dateTime: `${dateStr}T${endTime}:00`, timeZone: 'Asia/Taipei' }
-    };
-
     await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(event)
+      body: JSON.stringify({
+        summary: title,
+        start: { dateTime: `${dateStr}T${time}:00`, timeZone: 'Asia/Taipei' },
+        end: { dateTime: `${dateStr}T${endTime}:00`, timeZone: 'Asia/Taipei' }
+      })
     });
     count++;
   }
